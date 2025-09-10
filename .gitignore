@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Config
+.env
+*.env
+
+# Editor/OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Project artifacts (exclude big/local files)
+data/raw/
+data/processed/
+models/
+reports/
+cancer_app.db
+
+# Caches / tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+logs/
