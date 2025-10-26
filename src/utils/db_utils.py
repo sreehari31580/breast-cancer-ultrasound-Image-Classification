@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from typing import Iterator, Any, Tuple, List, Optional, Dict
 import json
 import bcrypt
+import re
 
 DB_PATH = "cancer_app.db"
 
@@ -30,6 +31,32 @@ def init_db():
 				confidence REAL,
 				user TEXT,
 				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+			"""
+		)
+		# Create user_activity table for analytics
+		cur.execute(
+			"""
+			CREATE TABLE IF NOT EXISTS user_activity (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				username TEXT,
+				activity_type TEXT,
+				timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+			"""
+		)
+		# Create prediction_feedback table for ground truth collection
+		cur.execute(
+			"""
+			CREATE TABLE IF NOT EXISTS prediction_feedback (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				prediction_id INTEGER NOT NULL,
+				user TEXT NOT NULL,
+				feedback_type TEXT NOT NULL,
+				actual_label TEXT,
+				notes TEXT,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (prediction_id) REFERENCES predictions(id)
 			)
 			"""
 		)
@@ -60,6 +87,8 @@ def _ensure_prediction_columns(cur: sqlite3.Cursor) -> None:
 		"report_path": "TEXT",
 		"probabilities": "TEXT",  # JSON-serialized dict of class->prob
 		"patient_id": "TEXT",
+		"confidence_score": "REAL",  # Max probability (redundant with confidence but explicit)
+		"processing_time_ms": "INTEGER",  # Time taken for inference
 	}
 	for col, coltype in wanted.items():
 		if col not in cols:
@@ -68,6 +97,96 @@ def _ensure_prediction_columns(cur: sqlite3.Cursor) -> None:
 
 def _hash_password(password: str) -> bytes:
 	return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+
+
+def validate_password(password: str) -> Tuple[bool, str]:
+	"""Validate password strength and return (is_valid, message).
+	
+	Requirements:
+	- Minimum 8 characters
+	- At least 1 uppercase letter
+	- At least 1 lowercase letter
+	- At least 1 number
+	- At least 1 special character (!@#$%^&*()_+-=[]{}|;:,.<>?)
+	
+	Returns:
+		Tuple[bool, str]: (is_valid, error_message or success_message)
+	"""
+	if len(password) < 8:
+		return False, "❌ Password must be at least 8 characters long"
+	
+	if len(password) > 128:
+		return False, "❌ Password must be less than 128 characters"
+	
+	if not re.search(r"[A-Z]", password):
+		return False, "❌ Password must contain at least 1 uppercase letter"
+	
+	if not re.search(r"[a-z]", password):
+		return False, "❌ Password must contain at least 1 lowercase letter"
+	
+	if not re.search(r"\d", password):
+		return False, "❌ Password must contain at least 1 number"
+	
+	if not re.search(r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]", password):
+		return False, "❌ Password must contain at least 1 special character (!@#$%^&*...)"
+	
+	# Check for common weak passwords
+	common_passwords = [
+		"password", "12345678", "qwerty", "abc123", "password1",
+		"admin123", "welcome1", "letmein", "monkey", "1234567890"
+	]
+	if password.lower() in common_passwords:
+		return False, "❌ This password is too common. Please choose a stronger password"
+	
+	return True, "✅ Strong password!"
+
+
+def get_password_strength(password: str) -> str:
+	"""Return password strength level: 'Weak', 'Medium', or 'Strong'.
+	
+	Used for visual feedback in UI.
+	"""
+	if len(password) < 8:
+		return "Weak"
+	
+	strength_score = 0
+	
+	# Length bonus
+	if len(password) >= 12:
+		strength_score += 2
+	elif len(password) >= 10:
+		strength_score += 1
+	
+	# Character diversity
+	if re.search(r"[A-Z]", password):
+		strength_score += 1
+	if re.search(r"[a-z]", password):
+		strength_score += 1
+	if re.search(r"\d", password):
+		strength_score += 1
+	if re.search(r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]", password):
+		strength_score += 1
+	
+	# Multiple character types
+	char_types = sum([
+		bool(re.search(r"[A-Z]", password)),
+		bool(re.search(r"[a-z]", password)),
+		bool(re.search(r"\d", password)),
+		bool(re.search(r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]", password))
+	])
+	
+	if char_types >= 4:
+		strength_score += 2
+	elif char_types >= 3:
+		strength_score += 1
+	
+	# Determine strength level
+	if strength_score >= 7:
+		return "Strong"
+	elif strength_score >= 4:
+		return "Medium"
+	else:
+		return "Weak"
 
 
 def create_user(username: str, password: str) -> bool:
@@ -103,10 +222,12 @@ def log_prediction(
 	model_version: Optional[str] = None,
 	probabilities: Optional[Dict[str, float]] = None,
 	patient_id: Optional[str] = None,
+	processing_time_ms: Optional[int] = None,
 ) -> int:
 	"""Insert a prediction row and return its id.
 
 	probabilities will be JSON-serialized if provided.
+	processing_time_ms: Time taken for inference in milliseconds.
 	"""
 	with get_conn() as conn:
 		cur = conn.cursor()
@@ -120,6 +241,10 @@ def log_prediction(
 			cols.append("probabilities"); vals.append(json.dumps(probabilities))
 		if patient_id is not None:
 			cols.append("patient_id"); vals.append(patient_id)
+		if processing_time_ms is not None:
+			cols.append("processing_time_ms"); vals.append(processing_time_ms)
+		# Store confidence_score explicitly
+		cols.append("confidence_score"); vals.append(confidence)
 		placeholders = ", ".join(["?"] * len(vals))
 		sql = f"INSERT INTO predictions ({', '.join(cols)}) VALUES ({placeholders})"
 		cur.execute(sql, tuple(vals))
@@ -145,3 +270,67 @@ def update_prediction_report_path(prediction_id: int, report_path: str) -> None:
 			"UPDATE predictions SET report_path = ? WHERE id = ?",
 			(report_path, prediction_id),
 		)
+
+
+def log_user_activity(username: str, activity_type: str) -> None:
+	"""Log user activity for analytics tracking.
+	
+	activity_type examples: 'login', 'logout', 'prediction', 'pdf_download'
+	"""
+	with get_conn() as conn:
+		cur = conn.cursor()
+		cur.execute(
+			"INSERT INTO user_activity (username, activity_type) VALUES (?, ?)",
+			(username, activity_type),
+		)
+
+
+def submit_prediction_feedback(
+	prediction_id: int,
+	user: str,
+	feedback_type: str,
+	actual_label: Optional[str] = None,
+	notes: Optional[str] = None,
+) -> int:
+	"""Submit feedback for a prediction.
+	
+	Args:
+		prediction_id: ID of the prediction being reviewed
+		user: Username submitting feedback
+		feedback_type: One of 'correct', 'incorrect', 'uncertain'
+		actual_label: The actual/correct label (if known)
+		notes: Optional notes about the feedback
+		
+	Returns:
+		ID of the inserted feedback record
+	"""
+	with get_conn() as conn:
+		cur = conn.cursor()
+		cur.execute(
+			"""
+			INSERT INTO prediction_feedback 
+			(prediction_id, user, feedback_type, actual_label, notes) 
+			VALUES (?, ?, ?, ?, ?)
+			""",
+			(prediction_id, user, feedback_type, actual_label, notes),
+		)
+		return cur.lastrowid
+
+
+def get_prediction_feedback(prediction_id: int) -> Optional[Dict[str, Any]]:
+	"""Get feedback for a specific prediction (if exists)."""
+	with get_conn() as conn:
+		conn.row_factory = sqlite3.Row
+		cur = conn.cursor()
+		cur.execute(
+			"""
+			SELECT id, prediction_id, user, feedback_type, actual_label, notes, created_at
+			FROM prediction_feedback
+			WHERE prediction_id = ?
+			ORDER BY created_at DESC
+			LIMIT 1
+			""",
+			(prediction_id,),
+		)
+		row = cur.fetchone()
+		return dict(row) if row else None

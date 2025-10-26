@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Paths
+    project_root: Path = Field(default=Path(__file__).parent.parent.parent)
     data_raw: Path = Field(default=Path("data/raw"))
     data_processed: Path = Field(default=Path("data/processed"))
     models_dir: Path = Field(default=Path("models"))
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
     db_path: Path = Field(default=Path("cancer_app.db"))
     reports_dir: Path = Field(default=Path("reports"))
     model_version: str = Field(default="v1")
+    admin_users: list[str] = Field(default=["admin"])  # List of admin usernames
 
     # Logging
     log_level: str = Field(default="INFO")

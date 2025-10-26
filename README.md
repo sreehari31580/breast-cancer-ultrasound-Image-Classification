@@ -1,24 +1,65 @@
 # Cancer Detection App (PyTorch + Grad‑CAM)
 
-An end‑to‑end breast ultrasound classification app. Train a PyTorch CNN (ResNet‑18), run predictions in a Streamlit UI with Grad‑CAM explainability, generate clinical‑style PDF reports, and keep an auditable SQLite history with user accounts.
+An end‑to‑end breast ultrasound class6) Run the app:
+```powershell
+streamlit run .\app.py
+```
+Register a user, log in, upload an image, see prediction + Grad‑CAM, and click "Download PDF Report".
+
+## Analytics Dashboards
+
+### Admin Dashboard 🔐
+Accessible only to admin users (configured in settings). Provides system-wide analytics:
+- **KPIs:** Total users, predictions, average confidence, processing time
+- **Time Series:** Daily prediction trends, hourly usage patterns
+- **Model Performance:** Class distribution, confidence by class, low-confidence alerts
+- **User Activity:** Most active users, engagement metrics
+
+**Configure Admin Users:**
+Copy `.env.example` to `.env` and set:
+```env
+ADMIN_USERS=admin,username1,username2
+```
+
+### User Analytics 📊
+Available to all authenticated users. Shows personal analytics:
+- **My Activity:** Total predictions, average confidence, login count
+- **Personal Trends:** Daily prediction history, confidence trends over time
+- **Class Distribution:** Pie chart of user's predictions by class
+- **Recent History:** Detailed table of recent predictions
+
+## Configuration
+Tunables live in `src/config/settings.py` or via `.env`:
+- **Paths:** `data_raw`, `data_processed`, `models_dir`, `reports_dir`
+- **Training:** `img_size`, `batch_size`, `epochs`, `lr`, `seed`
+- **Fine‑tuning:** `freeze_backbone`, `unfreeze_last_block`
+- **Imbalance:** `use_balanced_sampler` | `use_class_weights`, `class_weight_alpha`
+- **App:** `db_path`, `model_version`, `admin_users` (list of admin usernames)
+- **Logging:** `log_level` Train a PyTorch CNN (ResNet‑18), run predictions in a Streamlit UI with Grad‑CAM explainability, generate clinical‑style PDF reports, and keep an auditable SQLite history with user accounts.
 
 ## Features
-- Three‑class classification: Normal, Benign, Malignant
-- Streamlit UI with login/registration (bcrypt + SQLite)
-- Grad‑CAM heatmaps (targeting ResNet layer4) with overlay
-- One‑click PDF report: image, Grad‑CAM, probabilities, model version, timestamp, disclaimer
-- CLI for preprocess/train/evaluate (Typer)
-- Evaluation with classification report and confusion matrix
-- Config via Pydantic Settings; structured logging
+- **Three‑class classification:** Normal, Benign, Malignant
+- **Streamlit UI** with login/registration (bcrypt + SQLite)
+- **Grad‑CAM explainability:** Heatmaps targeting ResNet layer4 with overlay
+- **PDF Clinical Reports:** One‑click download with image, Grad‑CAM, probabilities, model version, timestamp, disclaimer
+- **Admin Analytics Dashboard:** System-wide metrics, user activity, model performance monitoring (admin-only)
+- **User Analytics:** Personal prediction history, trends, confidence scores, activity breakdown
+- **Interactive Visualizations:** Plotly charts for time series, distributions, and comparisons
+- **CLI Tools:** preprocess/train/evaluate (Typer)
+- **Evaluation Metrics:** Classification report and confusion matrix
+- **Production-Ready:** Pydantic Settings config, structured logging, activity tracking
 
 ## Tech stack
-- Python 3.13, Windows‑friendly
-- PyTorch + torchvision (ResNet‑18)
-- Streamlit, Pillow, OpenCV‑headless
-- scikit‑learn, numpy, pandas, matplotlib/seaborn
-- SQLite + bcrypt
-- pydantic/pydantic‑settings, typer
-- fpdf2 (PDF generation)
+- **Python 3.13**, Windows‑friendly
+- **Deep Learning:** PyTorch 2.8 + torchvision (ResNet‑18)
+- **Web Framework:** Streamlit 1.49+
+- **Visualization:** Plotly 5.14+, matplotlib, seaborn
+- **Image Processing:** Pillow, OpenCV‑headless
+- **Data Science:** scikit‑learn, numpy, pandas
+- **Database:** SQLite + bcrypt for secure authentication
+- **Configuration:** pydantic/pydantic‑settings, python-dotenv
+- **CLI:** Typer
+- **PDF Generation:** fpdf2
 
 ## Repository layout
 ```

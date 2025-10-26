@@ -38,4 +38,11 @@ cancer_app.db
 .mypy_cache/
 .ruff_cache/
 *.log
-logs/
+logs/# Backup and temporary files
+*_backup.py
+*_old*.py
+*_new*.py
+ADMIN_SETUP_COMPLETE.txt
+
+# Documentation (large PDFs - consider GitHub Releases instead)
+*.pdf
