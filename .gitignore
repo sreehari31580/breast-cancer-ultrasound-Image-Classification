@@ -38,7 +38,9 @@ cancer_app.db
 .mypy_cache/
 .ruff_cache/
 *.log
-logs/# Backup and temporary files
+logs/
+
+# Backup and temporary files
 *_backup.py
 *_old*.py
 *_new*.py
